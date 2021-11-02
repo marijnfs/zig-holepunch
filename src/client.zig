@@ -18,7 +18,7 @@ pub fn main() anyerror!void {
 
     const my_port = try std.fmt.parseInt(u16, args[1], 0);
 
-    const address = try std.net.Address.parseIp("0.0.0.0", my_port);
+    var address = try std.net.Address.parseIp("0.0.0.0", my_port);
     const sock_flags = os.SOCK.DGRAM | os.SOCK.CLOEXEC;
     const proto = os.IPPROTO.UDP;
 
@@ -35,57 +35,59 @@ pub fn main() anyerror!void {
     );
 
     const dst_address = try std.net.Address.parseIp("0.0.0.0", 3001);
+    {
+        var socklen = address.getOsSockLen();
+        try os.bind(sockfd, &address.any, socklen);
+    }
 
     var buf: [100]u8 = undefined;
     _ = try os.sendto(sockfd, &buf, 0, &dst_address.any, @sizeOf(std.net.Address));
 
-    const read = try os.recv(sockfd, &buf, 0);
-    if (read != 0) { //we will connect
-        std.time.sleep(1000000000);
-
-        // Read the ip
-        var ip_buf = buf[0..read];
-        const sep = find(ip_buf, ':');
-        const ip_addr_str = ip_buf[0..sep];
-        const port = try std.fmt.parseInt(u16, buf[sep + 1 .. read], 0);
-        const target_addr = try std.net.Address.parseIp(ip_addr_str, port);
-
-        _ = try os.sendto(sockfd, "Test", 0, &target_addr.any, @sizeOf(std.net.Address));
-
-        std.log.info("target addr: {s}", .{target_addr});
-    } else { //we will receive
-        const read2 = try os.recv(sockfd, &buf, 0);
-        std.log.info("Got: {s}", .{buf[0..read2]});
+    {
+        var socklen = address.getOsSockLen();
+        try os.getsockname(sockfd, &address.any, &socklen);
     }
 
+    const read = try os.recv(sockfd, &buf, 0);
     // if (read != 0) { //we will connect
     //     std.time.sleep(1000000000);
+
+    //     // Read the ip
     //     var ip_buf = buf[0..read];
     //     const sep = find(ip_buf, ':');
     //     const ip_addr_str = ip_buf[0..sep];
     //     const port = try std.fmt.parseInt(u16, buf[sep + 1 .. read], 0);
-
     //     const target_addr = try std.net.Address.parseIp(ip_addr_str, port);
-    //     std.log.info("target addr: {s}", .{target_addr});
 
-    //     var stream_connection = try net.tcpConnectToAddress(target_addr);
-    //     _ = try stream_connection.write("test");
+    //     _ = try os.sendto(sockfd, "Test", 0, &target_addr.any, @sizeOf(std.net.Address));
+
+    //     std.log.info("target addr: {s}", .{target_addr});
     // } else { //we will receive
-    //     var stream_server = std.net.StreamServer.init(net.StreamServer.Options{ .reuse_address = true });
-    //     try stream_server.listen(address);
-    //     var stream_connection = try stream_server.accept();
-    //     var len = try stream_connection.stream.read(&buf);
-    //     std.log.info("got tcp msg: {s}", .{buf[0..len]});
+    //     const read2 = try os.recv(sockfd, &buf, 0);
+    //     std.log.info("Got: {s}", .{buf[0..read2]});
     // }
 
-    // _ = try os.sendto(sockfd, &buf, 0, &target_addr.any, @sizeOf(std.net.Address));
+    if (read != 0) { //we will connect
+        std.time.sleep(1000000000);
+        std.log.info("sending", .{});
+        var ip_buf = buf[0..read];
+        const sep = find(ip_buf, ':');
+        const ip_addr_str = ip_buf[0..sep];
+        const port = try std.fmt.parseInt(u16, buf[sep + 1 .. read], 0);
 
-    // var other_address: std.net.Address = undefined;
-    // try os.getsockname(sockfd, &other_address.any, &socklen);
+        const target_addr = try std.net.Address.parseIp(ip_addr_str, port);
+        std.log.info("target addr: {s}", .{target_addr});
 
-    // std.log.info("{}", .{accepted_addr.any});
-    // std.log.info("{}", .{other_address.any});
-    // std.log.info("buf: {s}", .{buf[0..read]});
+        var stream_connection = try net.tcpConnectToAddress(target_addr);
+        _ = try stream_connection.write("test");
+    } else { //we will receive
+        std.log.info("receiving on {}", .{address});
+        var stream_server = std.net.StreamServer.init(net.StreamServer.Options{ .reuse_address = true });
+        try stream_server.listen(address);
+        var stream_connection = try stream_server.accept();
+        var len = try stream_connection.stream.read(&buf);
+        std.log.info("got tcp msg: {s}", .{buf[0..len]});
+    }
 }
 
 test "basic test" {
