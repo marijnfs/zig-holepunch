@@ -35,9 +35,7 @@ pub fn main() anyerror!void {
 
     { //recv from first client
         var buf: [100]u8 = undefined;
-        const read = try os.recv(sockfd, &buf, 0);
-
-        try os.getsockname(sockfd, &first_address.any, &socklen);
+        const read = try os.recvfrom(sockfd, &buf, 0, &first_address.any, &socklen);
 
         // std.log.info("{}", .{accepted_addr.any});
         std.log.info("First: {}", .{first_address});
@@ -46,8 +44,7 @@ pub fn main() anyerror!void {
 
     { //recv from second client
         var buf: [100]u8 = undefined;
-        const read = try os.recv(sockfd, &buf, 0);
-        try os.getsockname(sockfd, &second_address.any, &socklen);
+        const read = try os.recvfrom(sockfd, &buf, 0, &second_address.any, &socklen);
         std.log.info("Second: {}", .{second_address});
         std.log.info("buf: {s}", .{buf[0..read]});
 
