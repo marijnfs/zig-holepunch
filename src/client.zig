@@ -16,9 +16,12 @@ pub fn main() anyerror!void {
     var args = try std.process.argsAlloc(std.heap.page_allocator);
     defer std.process.argsFree(std.heap.page_allocator, args);
 
-    const my_port = try std.fmt.parseInt(u16, args[1], 0);
+    if (args.len < 3) {
+        std.log.err("Usage: {s} [serverip] [serverport]", .{args[0]});
+        return error.NotEnoughArguments;
+    }
 
-    var address = try std.net.Address.parseIp("0.0.0.0", my_port);
+    var address = try std.net.Address.parseIp("0.0.0.0", 0); //Addr ANY, with ephemeral port
     const sock_flags = os.SOCK.DGRAM | os.SOCK.CLOEXEC;
     const proto = os.IPPROTO.UDP;
 
@@ -34,7 +37,10 @@ pub fn main() anyerror!void {
         &std.mem.toBytes(@as(c_int, 1)),
     );
 
-    const dst_address = try std.net.Address.parseIp("0.0.0.0", 3001);
+    // Set server destination address
+    const server_ip = args[1];
+    const server_port = try std.fmt.parseInt(u16, args[2], 0);
+    const dst_address = try std.net.Address.parseIp(server_ip, server_port);
     {
         var socklen = address.getOsSockLen();
         try os.bind(sockfd, &address.any, socklen);
@@ -82,13 +88,15 @@ pub fn main() anyerror!void {
         std.log.info("target addr: {s}", .{target_addr});
 
         var stream_connection = try net.tcpConnectToAddress(target_addr);
-        _ = try stream_connection.write("test");
+        const msg = "test";
+        std.log.info("Sending message: {s}", .{msg});
+        _ = try stream_connection.write(msg);
     } else { //we will receive
         std.log.info("receiving on {}", .{address});
         var stream_server = std.net.StreamServer.init(net.StreamServer.Options{ .reuse_address = true });
         try stream_server.listen(address);
         var stream_connection = try stream_server.accept();
         var len = try stream_connection.stream.read(&buf);
-        std.log.info("got tcp msg: {s}", .{buf[0..len]});
+        std.log.info("Got TCP message: {s}", .{buf[0..len]});
     }
 }

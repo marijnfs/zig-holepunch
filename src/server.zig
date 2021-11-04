@@ -4,8 +4,16 @@ const os = std.os;
 
 pub fn main() anyerror!void {
     std.log.info("Server.", .{});
+    var args = try std.process.argsAlloc(std.heap.page_allocator);
+    defer std.process.argsFree(std.heap.page_allocator, args);
 
-    const address = try std.net.Address.parseIp("0.0.0.0", 3001);
+    if (args.len < 2) {
+        std.log.err("Usage: {s} [serverport]", .{args[0]});
+        return error.NotEnoughArguments;
+    }
+
+    const server_port = try std.fmt.parseInt(u16, args[1], 0);
+    const address = try std.net.Address.parseIp("0.0.0.0", server_port);
     const sock_flags = os.SOCK.DGRAM | os.SOCK.CLOEXEC;
     const proto = os.IPPROTO.UDP;
 
