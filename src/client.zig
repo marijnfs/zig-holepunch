@@ -49,6 +49,8 @@ pub fn main() anyerror!void {
     }
 
     const read = try os.recv(sockfd, &buf, 0);
+
+    //// Keep UDP socket
     // if (read != 0) { //we will connect
     //     std.time.sleep(1000000000);
 
@@ -67,6 +69,7 @@ pub fn main() anyerror!void {
     //     std.log.info("Got: {s}", .{buf[0..read2]});
     // }
 
+    // Start Tcp connection
     if (read != 0) { //we will connect
         std.time.sleep(1000000000);
         std.log.info("sending", .{});
@@ -88,8 +91,4 @@ pub fn main() anyerror!void {
         var len = try stream_connection.stream.read(&buf);
         std.log.info("got tcp msg: {s}", .{buf[0..len]});
     }
-}
-
-test "basic test" {
-    try std.testing.expectEqual(10, 3 + 7);
 }
