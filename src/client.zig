@@ -2,6 +2,7 @@ const std = @import("std");
 const net = std.net;
 const os = std.os;
 
+const alloc = std.heap.page_allocator;
 fn find(buf: []u8, char: u8) usize {
     var i: usize = 0;
     while (i < buf.len) : (i += 1) {
@@ -13,8 +14,8 @@ fn find(buf: []u8, char: u8) usize {
 
 pub fn main() anyerror!void {
     std.log.info("Client.", .{});
-    var args = try std.process.argsAlloc(std.heap.page_allocator);
-    defer std.process.argsFree(std.heap.page_allocator, args);
+    var args = try std.process.argsAlloc(alloc);
+    defer std.process.argsFree(alloc, args);
 
     if (args.len < 3) {
         std.log.err("Usage: {s} [serverip] [serverport]", .{args[0]});
@@ -22,20 +23,23 @@ pub fn main() anyerror!void {
     }
 
     var address = try std.net.Address.parseIp("0.0.0.0", 0); //Addr ANY, with ephemeral port
-    const sock_flags = os.SOCK.DGRAM | os.SOCK.CLOEXEC;
-    const proto = os.IPPROTO.UDP;
+    const sockfd = blk: {
+        const sock_flags = os.SOCK.DGRAM | os.SOCK.CLOEXEC;
+        const proto = os.IPPROTO.UDP;
 
-    const sockfd = try os.socket(address.any.family, sock_flags, proto);
-    errdefer {
-        os.closeSocket(sockfd);
-    }
+        const fd = try os.socket(address.any.family, sock_flags, proto);
+        errdefer {
+            os.closeSocket(fd);
+        }
 
-    try os.setsockopt(
-        sockfd,
-        os.SOL.SOCKET,
-        os.SO.REUSEADDR,
-        &std.mem.toBytes(@as(c_int, 1)),
-    );
+        try os.setsockopt(
+            fd,
+            os.SOL.SOCKET,
+            os.SO.REUSEADDR,
+            &std.mem.toBytes(@as(c_int, 1)),
+        );
+        break :blk fd;
+    };
 
     // Set server destination address
     const server_ip = args[1];
@@ -65,23 +69,47 @@ pub fn main() anyerror!void {
     const sep = find(ip_buf, ':');
     const ip_addr_str = ip_buf[0..sep];
     const port = try std.fmt.parseInt(u16, buf[sep + 1 .. read], 0);
-    const target_addr = try std.net.Address.parseIp(ip_addr_str, port);
+    var target_addr = try std.net.Address.parseIp(ip_addr_str, port);
 
     // Send hello
-    const message = "Hello, you there?";
-    std.log.info("sending to: {s}", .{target_addr});
-    _ = try os.sendto(sockfd, message, 0, &target_addr.any, @sizeOf(std.net.Address));
+    {
+        address.setPort(address.getPort() + 1);
+        target_addr.setPort(target_addr.getPort() + 1);
 
-    // Listen for reply
-    std.log.info("receiving", .{});
-    const read2 = try os.recv(sockfd, &buf, 0);
-    std.log.info("Got: {s}", .{buf[0..read2]});
+        const send_sockfd = blk: {
+            const sock_flags = os.SOCK.DGRAM | os.SOCK.CLOEXEC;
+            const proto = os.IPPROTO.UDP;
 
-    // Send hello again
-    while (true) {
-        std.time.sleep(100000000);
+            const fd =
+                try os.socket(address.any.family, sock_flags, proto);
+            errdefer {
+                os.closeSocket(fd);
+            }
+
+            try os.setsockopt(
+                fd,
+                os.SOL.SOCKET,
+                os.SO.REUSEADDR,
+                &std.mem.toBytes(@as(c_int, 1)),
+            );
+            break :blk fd;
+        };
+
+        const message = "Hello, you there?";
         std.log.info("sending to: {s}", .{target_addr});
-        _ = try os.sendto(sockfd, message, 0, &target_addr.any, @sizeOf(std.net.Address));
+        _ = try os.sendto(send_sockfd, message, 0, &target_addr.any, @sizeOf(std.net.Address));
+
+        // Listen for reply
+        std.log.info("receiving", .{});
+        const read2 = try os.recv(send_sockfd, &buf, 0);
+        std.log.info("Got: {s}", .{buf[0..read2]});
+
+        // Send hello again
+        while (true) {
+            std.time.sleep(100000000);
+            std.log.info("sending to: {s}", .{target_addr});
+            _ = try os.sendto(send_sockfd, message, 0, &target_addr.any, @sizeOf(std.net.Address));
+        }
     }
 
     // Start Tcp connection
