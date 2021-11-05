@@ -94,6 +94,8 @@ pub fn main() anyerror!void {
             );
             break :blk fd;
         };
+        var socklen = address.getOsSockLen();
+        try os.bind(send_sockfd, &address.any, socklen);
 
         const message = "Hello, you there?";
         std.log.info("sending to: {s}", .{target_addr});
