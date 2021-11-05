@@ -73,44 +73,46 @@ pub fn main() anyerror!void {
 
     // Send hello
     {
-        address.setPort(address.getPort() + 1);
-        target_addr.setPort(target_addr.getPort() + 1);
+        // address.setPort(address.getPort() + 1);
+        // target_addr.setPort(target_addr.getPort() + 1);
 
-        const send_sockfd = blk: {
-            const sock_flags = os.SOCK.DGRAM | os.SOCK.CLOEXEC;
-            const proto = os.IPPROTO.UDP;
+        // const send_sockfd = blk: {
+        //     const sock_flags = os.SOCK.DGRAM | os.SOCK.CLOEXEC;
+        //     const proto = os.IPPROTO.UDP;
 
-            const fd =
-                try os.socket(address.any.family, sock_flags, proto);
-            errdefer {
-                os.closeSocket(fd);
-            }
+        //     const fd =
+        //         try os.socket(address.any.family, sock_flags, proto);
+        //     errdefer {
+        //         os.closeSocket(fd);
+        //     }
 
-            try os.setsockopt(
-                fd,
-                os.SOL.SOCKET,
-                os.SO.REUSEADDR,
-                &std.mem.toBytes(@as(c_int, 1)),
-            );
-            break :blk fd;
-        };
-        var socklen = address.getOsSockLen();
-        try os.bind(send_sockfd, &address.any, socklen);
+        //     try os.setsockopt(
+        //         fd,
+        //         os.SOL.SOCKET,
+        //         os.SO.REUSEADDR,
+        //         &std.mem.toBytes(@as(c_int, 1)),
+        //     );
+        //     break :blk fd;
+        // };
+        // std.log.info("binding to {}", .{address});
+        // var socklen = address.getOsSockLen();
+        // try os.bind(send_sockfd, &address.any, socklen);
 
         const message = "Hello, you there?";
         std.log.info("sending to: {s}", .{target_addr});
-        _ = try os.sendto(send_sockfd, message, 0, &target_addr.any, @sizeOf(std.net.Address));
+        _ = try os.sendto(sockfd, message, 0, &target_addr.any, @sizeOf(std.net.Address));
 
         // Listen for reply
         std.log.info("receiving", .{});
-        const read2 = try os.recv(send_sockfd, &buf, 0);
+        var socklen = address.getOsSockLen();
+        const read2 = try os.recvfrom(sockfd, &buf, 0, &target_addr.any, &socklen);
         std.log.info("Got: {s}", .{buf[0..read2]});
 
         // Send hello again
         while (true) {
             std.time.sleep(100000000);
             std.log.info("sending to: {s}", .{target_addr});
-            _ = try os.sendto(send_sockfd, message, 0, &target_addr.any, @sizeOf(std.net.Address));
+            _ = try os.sendto(sockfd, message, 0, &target_addr.any, @sizeOf(std.net.Address));
         }
     }
 
