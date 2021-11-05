@@ -56,12 +56,11 @@ pub fn main() anyerror!void {
         std.log.info("Second: {}", .{second_address});
         std.log.info("buf: {s}", .{buf[0..read]});
 
-        // const first_addr_str = try std.fmt.allocPrint(std.heap.page_allocator, "{}", .{first_address});
+        const first_addr_str = try std.fmt.allocPrint(std.heap.page_allocator, "{}", .{first_address});
         const second_addr_str = try std.fmt.allocPrint(std.heap.page_allocator, "{}", .{second_address});
 
         _ = try os.sendto(sockfd, second_addr_str, 0, &first_address.any, @sizeOf(std.net.Address));
-        // _ = try os.sendto(sockfd, first_addr_str, 0, &second_address.any, @sizeOf(std.net.Address));
-        _ = try os.sendto(sockfd, "", 0, &second_address.any, @sizeOf(std.net.Address));
+        _ = try os.sendto(sockfd, first_addr_str, 0, &second_address.any, @sizeOf(std.net.Address));
     }
 }
 
