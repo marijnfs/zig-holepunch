@@ -68,14 +68,21 @@ pub fn main() anyerror!void {
     const target_addr = try std.net.Address.parseIp(ip_addr_str, port);
 
     // Send hello
-    std.log.info("sending to: {s}", .{target_addr});
     const message = "Hello, you there?";
+    std.log.info("sending to: {s}", .{target_addr});
     _ = try os.sendto(sockfd, message, 0, &target_addr.any, @sizeOf(std.net.Address));
 
     // Listen for reply
     std.log.info("receiving", .{});
     const read2 = try os.recv(sockfd, &buf, 0);
     std.log.info("Got: {s}", .{buf[0..read2]});
+
+    // Send hello again
+    while (true) {
+        std.time.sleep(100000000);
+        std.log.info("sending to: {s}", .{target_addr});
+        _ = try os.sendto(sockfd, message, 0, &target_addr.any, @sizeOf(std.net.Address));
+    }
 
     // Start Tcp connection
     // if (read != 0) { //we will connect
