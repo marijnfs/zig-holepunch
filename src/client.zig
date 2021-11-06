@@ -12,6 +12,41 @@ fn find(buf: []u8, char: u8) usize {
     return i;
 }
 
+pub fn create_udp_socket(address: std.net.Address) !os.socket_t {
+    const sock_flags = os.SOCK.DGRAM | os.SOCK.CLOEXEC;
+    const proto = os.IPPROTO.UDP;
+
+    const fd = try os.socket(address.any.family, sock_flags, proto);
+    errdefer {
+        os.closeSocket(fd);
+    }
+
+    try os.setsockopt(
+        fd,
+        os.SOL.SOCKET,
+        os.SO.REUSEADDR,
+        &std.mem.toBytes(@as(c_int, 1)),
+    );
+
+    var socklen = address.getOsSockLen();
+    try os.bind(fd, &address.any, socklen);
+
+    return fd;
+}
+
+pub fn try_connection(src_addr: std.net.Address, dest_addr: std.net.Address) !void {
+    const local = try create_udp_socket(src_addr);
+    const msg = "Hello there";
+    _ = try os.sendto(local, msg, 0, &dest_addr.any, @sizeOf(std.net.Address));
+
+    var recv_address: std.net.Address = undefined;
+    var socklen = recv_address.getOsSockLen();
+
+    var buf: [100]u8 = undefined;
+    const read = try os.recvfrom(local, &buf, 0, &recv_address.any, &socklen);
+    std.log.info("Got: {s} from {}", .{ buf[0..read], recv_address });
+}
+
 pub fn main() anyerror!void {
     std.log.info("Client.", .{});
     var args = try std.process.argsAlloc(alloc);
@@ -23,32 +58,12 @@ pub fn main() anyerror!void {
     }
 
     var address = try std.net.Address.parseIp("0.0.0.0", 0); //Addr ANY, with ephemeral port
-    const sockfd = blk: {
-        const sock_flags = os.SOCK.DGRAM | os.SOCK.CLOEXEC;
-        const proto = os.IPPROTO.UDP;
-
-        const fd = try os.socket(address.any.family, sock_flags, proto);
-        errdefer {
-            os.closeSocket(fd);
-        }
-
-        try os.setsockopt(
-            fd,
-            os.SOL.SOCKET,
-            os.SO.REUSEADDR,
-            &std.mem.toBytes(@as(c_int, 1)),
-        );
-        break :blk fd;
-    };
+    const sockfd = try create_udp_socket(address);
 
     // Set server destination address
     const server_ip = args[1];
     const server_port = try std.fmt.parseInt(u16, args[2], 0);
     const dst_address = try std.net.Address.parseIp(server_ip, server_port);
-    {
-        var socklen = address.getOsSockLen();
-        try os.bind(sockfd, &address.any, socklen);
-    }
 
     {
         var socklen = address.getOsSockLen();
@@ -71,6 +86,18 @@ pub fn main() anyerror!void {
     const port = try std.fmt.parseInt(u16, buf[sep + 1 .. read], 0);
     var target_addr = try std.net.Address.parseIp(ip_addr_str, port);
 
+    var frames: [256]@Frame(try_connection) = undefined;
+    var i: usize = 0;
+    while (i < frames.len) : (i += 1) {
+        var any_address = try std.net.Address.parseIp("0.0.0.0", 0); //Addr ANY, with ephemeral port
+
+        frames[i] = async try_connection(any_address, target_addr);
+
+        var prng = std.rand.DefaultPrng.init(0);
+        const random = prng.random();
+
+        target_addr.setPort(random.int(u16));
+    }
     // Send hello
     {
         // address.setPort(address.getPort() + 1);
@@ -104,7 +131,7 @@ pub fn main() anyerror!void {
 
         // Listen for reply
         std.log.info("receiving", .{});
-        var socklen = address.getOsSockLen();
+        var socklen = target_addr.getOsSockLen();
         const read2 = try os.recvfrom(sockfd, &buf, 0, &target_addr.any, &socklen);
         std.log.info("Got: {s}", .{buf[0..read2]});
 
